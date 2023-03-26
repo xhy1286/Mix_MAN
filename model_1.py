@@ -69,10 +69,9 @@ class STEmbedding(nn.Module):
             bn_decay=bn_decay)  # input_dims = time step per day + days per week=288+7=295
 
     def forward(self, SE, TE, T=288):
-        # SE[sensor_id, 64], TE[bs, his+pre, 2]
-        # spatial embedding
+ 
         SE = SE.unsqueeze(0).unsqueeze(0).cuda()
-        SE = self.FC_se(SE)  # SE(1, 1, sensor_id, 64)
+        SE = self.FC_se(SE)  # SE(1, 1,  64)
         # temporal embedding
         dayofweek = torch.empty(TE.shape[0], TE.shape[1], 7)
         timeofday = torch.empty(TE.shape[0], TE.shape[1], T)
@@ -107,39 +106,37 @@ class Attention(nn.Module):
     def forward(self, X, STE):
         batch_size_ = X.shape[0]
         X = torch.cat((X, STE), dim=-1)
-        # [batch_size, num_step, num_vertex, K * d]
+        # [batch_size, num_step, K * d]
         query = self.FC_q(X)
         key = self.FC_k(X)
         value = self.FC_v(X)
-        # [K * batch_size, num_step, num_vertex, d]
+        # [K * batch_size, num_step,  d]
         query = torch.cat(torch.split(query, self.K, dim=-1), dim=0)
         key = torch.cat(torch.split(key, self.K, dim=-1), dim=0)
         value = torch.cat(torch.split(value, self.K, dim=-1), dim=0)
 
-        # query: [K * batch_size, num_vertex, num_step, d]
-        # key:   [K * batch_size, num_vertex, d, num_step]
-        # value: [K * batch_size, num_vertex, num_step, d]
+        # query: [K * batch_size,num_step, d]
+        # key:   [K * batch_size,  d, num_step]
+        # value: [K * batch_size, num_step, d]
         query = query.permute(0, 2, 1, 3)
         key = key.permute(0, 2, 3, 1)
         value = value.permute(0, 2, 1, 3)
 
-        # [K * batch_size, num_vertex, num_step, num_step]
+        # [K * batch_size,  num_step, num_step]
         attention = torch.matmul(query, key)
         attention /= (self.d ** 0.5)
         # mask attention score
         if self.mask:
             batch_size = X.shape[0]
             num_step = X.shape[1]
-            num_vertex = X.shape[2]
             mask = torch.ones(num_step, num_step)
             mask = torch.tril(mask)
             mask = torch.unsqueeze(torch.unsqueeze(mask, dim=0), dim=0)
-            mask = mask.repeat(self.K * batch_size, num_vertex, 1, 1)
+            mask = mask.repeat(self.K * batch_size, 1, 1)
             mask = mask.to(torch.bool)
             attention = torch.where(mask, attention, -2 ** 15 + 1)
         # softmax
         attention = F.softmax(attention, dim=-1)
-        # [batch_size, num_step, num_vertex, D]
         X = torch.matmul(attention, value)
         X = X.permute(0, 2, 1, 3)
         X = torch.cat(torch.split(X, batch_size_, dim=0), dim=-1)  # orginal K, change to batch_size
@@ -226,18 +223,14 @@ class SAE(nn.Module):
 
 
     def forward(self, x):
-        # need to modify or update x after each encoding and decoding
         x = self.activation(self.fc1(x))
         x = self.activation(self.fc2(x))
-        # start decoding it
         x = self.activation(self.fc3(x))
         x = self.activation(self.fc4(x))
         x = self.activation(self.fc5(x))
 
-        # the final part of the decoding doesn't need to apply the activation function, we directly use full
-        # coneection fc4 function
+  
         x = self.fc6(x)
-        # x is our vector of predicted ratings
         return x
 
 
@@ -280,7 +273,6 @@ class STE_SAE(nn.Module):
         TE = TE.unsqueeze(dim=1).unsqueeze(dim=2).cuda() # bs, 1, 1, 295
         TE = self.FC_te(TE)  # bs, 1, 1, 295 -> # bs, 1, 1, 9
         del dayofweek, timeofday
-        # SE+TE bs,1,1,9
         return PE, SE + TE
 
 
@@ -288,7 +280,7 @@ class Mix_MAN(nn.Module):
 
     def __init__(self, SE, args, bn_decay, in_dim, out_dim):
         super(Mix_MAN, self).__init__()
-        # L = args.L
+        L = args.L
         K = args.K
         d = args.d
         D = K * d
@@ -298,7 +290,7 @@ class Mix_MAN(nn.Module):
 
         self.STE_SAE = STE_SAE(D, bn_decay, in_dim, out_dim)
 
-        self.STAttBlock1_1 = STAttBlock(K, d, bn_decay)
+        self.STAttBlock_1 = nn.ModuleList([Attention(K, d, bn_decay) for _ in range(L)])
 
         self.FC_1 = FC(input_dims=[1, D], units=[D, D], activations=[F.relu, None],
                        bn_decay=bn_decay)
@@ -328,13 +320,10 @@ class Mix_MAN(nn.Module):
         STE_his = STE[:, :self.num_his]     
         STE_pred = STE[:, self.num_his:]    
 
-        x1 = self.STAttBlock1_1(X, STE_his)
+        x1 = self.STAttBlock_1(X, STE_his)
 
         X4 = self.FC_3(X  + x1)
         X = X + X4
-
-        X8 = self.FC_3(X + x5)
-        X = X + X8
 
         FE = FE.unsqueeze(dim=1).unsqueeze(dim=2).expand(-1, X.shape[1], X.shape[2], -1)
         X = torch.cat([X, FE], dim=-1)

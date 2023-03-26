@@ -1,3 +1,9 @@
+'''
+Description: 
+Author: 
+Date: 2023-03-24 09:29:39
+LastEditTime: 2023-03-26 20:24:48
+'''
 import time
 import datetime
 import math
@@ -11,7 +17,7 @@ def train(model, args, log, loss_criterion, optimizer, scheduler, DEVICE):
     (trainX, trainTE, trainY, valX, valTE, valY, testX, testTE,
      testY, SE, mean, std) = load_data(args)
 
-    num_train, _, num_vertex = trainX.shape
+    num_train, _ = trainX.shape
     log_string(log, '**** training model ****')
     num_val = valX.shape[0]
     train_num_batch = math.ceil(num_train / args.batch_size)

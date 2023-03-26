@@ -9,7 +9,7 @@ from utils.utils_mydata import load_data
 def test(args, log, DEVICE):
     (trainX, trainTE, trainY, valX, valTE, valY, testX, testTE,
      testY, SE, mean, std) = load_data(args)
-    num_train, _, num_vertex = trainX.shape
+    num_train, _= trainX.shape
     num_val = valX.shape[0]
     num_test = testX.shape[0]
     train_num_batch = math.ceil(num_train / args.batch_size)
@@ -26,37 +26,7 @@ def test(args, log, DEVICE):
     log_string(log, 'evaluating...')
 
     with torch.no_grad():
-        # trainPred = []
-        # for batch_idx in range(train_num_batch):
-        #     start_idx = batch_idx * args.batch_size
-        #     end_idx = min(num_train, (batch_idx + 1) * args.batch_size)
-        #     X = trainX[start_idx: end_idx]
-        #     TE = trainTE[start_idx: end_idx]
-        #     X = X.to(DEVICE)
-        #     TE = TE.to(DEVICE)
-        #     pred_batch = model(X, TE)
-        #     pred_batch = pred_batch.cpu()
-        #     trainPred.append(pred_batch.detach().clone())
-        #     del X, TE, pred_batch
-        #
-        # trainPred = torch.from_numpy(np.concatenate(trainPred, axis=0))
-        # trainPred = trainPred * std + mean
-        #
-        # valPred = []
-        # for batch_idx in range(val_num_batch):
-        #     start_idx = batch_idx * args.batch_size
-        #     end_idx = min(num_val, (batch_idx + 1) * args.batch_size)
-        #     X = valX[start_idx: end_idx]
-        #     TE = valTE[start_idx: end_idx]
-        #     X = X.to(DEVICE)
-        #     TE = TE.to(DEVICE)
-        #     pred_batch = model(X, TE)
-        #     pred_batch = pred_batch.cpu()
-        #     valPred.append(pred_batch.detach().clone())
-        #     del X, TE, pred_batch
-        # valPred = torch.from_numpy(np.concatenate(valPred, axis=0))
-        # valPred = valPred * std + mean
-
+ 
         testPred = []
         start_test = time.time()
         for batch_idx in range(test_num_batch):
